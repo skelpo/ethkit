@@ -1,4 +1,5 @@
 import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1';
 
 export function keccak256(data: Uint8Array | string): string {
     let bytes: Uint8Array;
@@ -96,6 +97,39 @@ export function concat(arrays: Uint8Array[]): Uint8Array {
         offset += arr.length;
     }
     return result;
+}
+
+/** EIP-191 personal message hash: keccak256("\x19Ethereum Signed Message:\n" + len + message) */
+export function hashMessage(message: string | Uint8Array): string {
+    let msgBytes: Uint8Array;
+    if (typeof message === 'string') {
+        msgBytes = toUtf8Bytes(message);
+    } else {
+        msgBytes = message;
+    }
+    const prefix = toUtf8Bytes('\x19Ethereum Signed Message:\n' + msgBytes.length);
+    const combined = new Uint8Array(prefix.length + msgBytes.length);
+    combined.set(prefix, 0);
+    combined.set(msgBytes, prefix.length);
+    return keccak256(combined);
+}
+
+/** Recover the address that signed a message hash with the given signature */
+export function recoverAddress(digest: string, signature: string): string {
+    const sigBytes = hexToBytes(signature);
+    const r = sigBytes.slice(0, 32);
+    const s = sigBytes.slice(32, 64);
+    const v = sigBytes[64];
+    const recoveryBit = v >= 27 ? v - 27 : v;
+    const sig = new secp256k1.Signature(
+        BigInt('0x' + bytesToHex(r)),
+        BigInt('0x' + bytesToHex(s)),
+    ).addRecoveryBit(recoveryBit);
+    const pubKey = sig.recoverPublicKey(hexToBytes(digest));
+    const uncompressed = pubKey.toRawBytes(false);
+    // Address = last 20 bytes of keccak256(pubkey without 0x04 prefix)
+    const hash = keccak_256(uncompressed.slice(1));
+    return '0x' + bytesToHex(hash.slice(-20));
 }
 
 export function zeroPad(data: Uint8Array, length: number): Uint8Array {

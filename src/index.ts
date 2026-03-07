@@ -2,7 +2,7 @@
 export { parseEther, formatEther, formatUnits, parseUnits } from './units.js';
 
 // Hashing & bytes
-export { keccak256, id, toUtf8Bytes, toUtf8String, hexToBytes, bytesToHex, concat as concatBytes, zeroPad } from './hash.js';
+export { keccak256, id, toUtf8Bytes, toUtf8String, hexToBytes, bytesToHex, concat as concatBytes, zeroPad, hashMessage, recoverAddress } from './hash.js';
 
 // Address
 export { getAddress, isAddress, computeAddress } from './address.js';
@@ -23,9 +23,11 @@ export { serializeEip1559, serializeSignedEip1559, serializeLegacy, serializeSig
 // Provider
 export { createProvider } from './provider.js';
 export type { Provider } from './provider.js';
+export { JsonRpcProvider, Network } from './json-rpc-provider.js';
+export { WebSocketProvider } from './websocket-provider.js';
 
 // Wallet
-export { createWallet } from './wallet.js';
+export { createWallet, createRandomWallet } from './wallet.js';
 export type { Wallet } from './wallet.js';
 
 // Contract

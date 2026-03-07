@@ -1,4 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
+import { randomBytes } from '@noble/hashes/utils';
 import { keccak256, hexToBytes, bytesToHex } from './hash.js';
 import { computeAddress } from './address.js';
 import { serializeEip1559, serializeSignedEip1559, serializeLegacy, serializeSignedLegacy } from './transaction.js';
@@ -127,4 +128,10 @@ export function createWallet(privateKey: string, provider?: Provider): Wallet {
     };
 
     return wallet;
+}
+
+/** Generate a new random wallet */
+export function createRandomWallet(provider?: Provider): Wallet {
+    const key = randomBytes(32);
+    return createWallet('0x' + bytesToHex(key), provider);
 }

@@ -26,6 +26,7 @@ export interface Provider {
     getNetwork(): { chainId: bigint; name: string };
     /** Event subscription (no-op for HTTP providers, used by WebSocket providers) */
     on(event: string, listener: (...args: any[]) => void): void;
+    off(event: string, listener: (...args: any[]) => void): void;
     removeAllListeners(event?: string): void;
 }
 
@@ -228,7 +229,11 @@ export function createProvider(url: string, chainId: number = 1): Provider {
         },
 
         on(_event: string, _listener: (...args: any[]) => void): void {
-            // No-op for HTTP providers — override in WebSocket providers
+            // No-op for HTTP providers
+        },
+
+        off(_event: string, _listener: (...args: any[]) => void): void {
+            // No-op for HTTP providers
         },
 
         removeAllListeners(_event?: string): void {
