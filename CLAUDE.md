@@ -4,6 +4,7 @@
 
 ethkit is a pure TypeScript Ethereum library — a lightweight, function-based replacement for ethers.js.
 No Proxy objects, no class inheritance, no dynamic imports, no native addons.
+Compatible with [Perry](https://perryts.com) (TypeScript-to-native compiler).
 
 ## Build & test
 

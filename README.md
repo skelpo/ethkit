@@ -4,6 +4,8 @@ Pure TypeScript Ethereum library. Drop-in replacement for the most-used parts of
 
 No Proxy objects, no class inheritance, no dynamic imports, no native addons. Just functions.
 
+Compatible with [Perry](https://perryts.com) — the TypeScript-to-native compiler.
+
 ## Install
 
 ```bash
@@ -68,6 +70,7 @@ console.log(formatEther(balance));
 - **Native BigInt.** All numeric values are `bigint`. No `BigNumber` wrapper.
 - **Throws on bad input.** `parseUnits('1.12345', 4)` throws (too many decimals) rather than silently truncating.
 - **Minimal surface.** ~1,700 lines of source covering the most common Ethereum operations.
+- **[Perry](https://perryts.com) compatible.** No Proxy, no `__proto__`, no dynamic imports, no class inheritance — compiles cleanly to native code.
 
 ## ABI support
 
