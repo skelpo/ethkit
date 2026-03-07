@@ -9,9 +9,9 @@ export function rlpEncode(input: RlpInput): Uint8Array {
     }
 
     if (Array.isArray(input)) {
-        let encoded = new Uint8Array(0);
+        let encoded: Uint8Array = new Uint8Array(0);
         for (const item of input) {
-            encoded = concatBytes(encoded, rlpEncode(item));
+            encoded = concatBytes(encoded, rlpEncode(item) as Uint8Array<ArrayBuffer>);
         }
         return concatBytes(encodeLength(encoded.length, 0xc0), encoded);
     }

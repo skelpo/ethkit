@@ -1,12 +1,43 @@
 {
-  "name": "ethkit",
+  "name": "@skelpo/ethkit",
   "version": "0.1.0",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "description": "Pure TypeScript Ethereum library. Lightweight, function-based drop-in replacement for ethers.js.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
     "test": "npx tsx --test test/*.test.ts"
   },
+  "keywords": [
+    "ethereum",
+    "ethers",
+    "web3",
+    "evm",
+    "abi",
+    "blockchain",
+    "typescript",
+    "perry"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skelpo/ethkit.git"
+  },
+  "homepage": "https://github.com/skelpo/ethkit",
+  "license": "MIT",
   "dependencies": {
     "@noble/hashes": "^1.7.1",
     "@noble/curves": "^1.8.1"
