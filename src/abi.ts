@@ -25,12 +25,28 @@ function encodeValue(type: string, value: any): string {
         const hex = (value as string).replace('0x', '');
         return hex.padEnd(64, '0');
     }
+    // Static tuple: all components are static, encoded inline
+    if (type.startsWith('(') && type.endsWith(')')) {
+        return encodeTuple(parseTupleComponents(type), value);
+    }
     throw new Error(`Unsupported static type: ${type}`);
 }
 
 /** Check if a type is dynamic (variable-length) */
 function isDynamic(type: string): boolean {
-    return type === 'string' || type === 'bytes' || type.endsWith('[]');
+    if (type === 'string' || type === 'bytes' || type.endsWith('[]')) return true;
+    // Tuple is dynamic if any component is dynamic
+    if (type.startsWith('(') && type.endsWith(')')) {
+        return parseTupleComponents(type).some(isDynamic);
+    }
+    return false;
+}
+
+/** Parse tuple type string "(type1,type2,...)" into component types */
+function parseTupleComponents(type: string): string[] {
+    // Strip outer parens
+    const inner = type.slice(1, -1);
+    return splitTopLevelParams(inner);
 }
 
 /** Encode dynamic data, returns hex without 0x prefix */
@@ -72,7 +88,39 @@ function encodeDynamic(type: string, value: any): string {
         }
         return hex;
     }
+    // Dynamic tuple: encode as head (offsets for dynamic components) + tail
+    if (type.startsWith('(') && type.endsWith(')')) {
+        return encodeTuple(parseTupleComponents(type), value);
+    }
     throw new Error(`Unsupported dynamic type: ${type}`);
+}
+
+/** Encode a tuple value. Value can be an array or object with named keys. */
+function encodeTuple(components: string[], value: any): string {
+    let vals: any[];
+    if (Array.isArray(value)) {
+        vals = value;
+    } else {
+        // Object: try numeric keys first, then fall back to property insertion order
+        const numericVal = components.map((_, i) => value[i]);
+        if (numericVal[0] !== undefined) {
+            vals = numericVal;
+        } else {
+            vals = Object.values(value);
+        }
+    }
+    const headSize = components.length * 32;
+    let head = '';
+    let tail = '';
+    for (let i = 0; i < components.length; i++) {
+        if (isDynamic(components[i])) {
+            head += BigInt(headSize + tail.length / 2).toString(16).padStart(64, '0');
+            tail += encodeDynamic(components[i], vals[i]);
+        } else {
+            head += encodeValue(components[i], vals[i]);
+        }
+    }
+    return head + tail;
 }
 
 /** ABI-encode parameters given types and values */
@@ -137,6 +185,10 @@ function decodeValue(type: string, data: string, offset: number): any {
         const size = parseInt(type.replace('bytes', ''));
         return '0x' + slot.slice(0, size * 2);
     }
+    // Static tuple: decode each component inline
+    if (type.startsWith('(') && type.endsWith(')')) {
+        return decodeTuple(parseTupleComponents(type), data, offset);
+    }
     throw new Error(`Unsupported decode type: ${type}`);
 }
 
@@ -165,7 +217,28 @@ function decodeDynamic(type: string, data: string, offset: number): any {
         }
         return results;
     }
+    // Dynamic tuple: has offset-based layout for dynamic components
+    if (type.startsWith('(') && type.endsWith(')')) {
+        return decodeTuple(parseTupleComponents(type), data, offset);
+    }
     throw new Error(`Unsupported dynamic decode type: ${type}`);
+}
+
+/** Decode a tuple from ABI data at the given hex-char offset */
+function decodeTuple(components: string[], data: string, offset: number): any[] {
+    const results: any[] = [];
+    const tupleData = data.slice(offset);
+    let slotIdx = 0;
+    for (const comp of components) {
+        if (isDynamic(comp)) {
+            const dynOffset = Number(BigInt('0x' + tupleData.slice(slotIdx * 64, slotIdx * 64 + 64)));
+            results.push(decodeDynamic(comp, tupleData, dynOffset * 2));
+        } else {
+            results.push(decodeValue(comp, tupleData, slotIdx * 64));
+        }
+        slotIdx++;
+    }
+    return results;
 }
 
 // --- Function Selector & Signature Parsing ---
@@ -178,12 +251,91 @@ export function parseSignature(sig: string): { name: string; inputs: string[]; o
     // Strip leading "event " keyword if present
     if (s.startsWith('event ')) s = s.slice(6);
 
-    const match = s.match(/^(\w+)\(([^)]*)\)(?:\s*(?:returns|view|pure|external|public|nonpayable|payable)\s*)*(?:\(([^)]*)\))?/);
-    if (!match) throw new Error(`Invalid function signature: ${sig}`);
-    const name = match[1];
-    const inputs = match[2] ? match[2].split(',').map(t => t.trim().split(/\s+/)[0]).filter(t => t.length > 0) : [];
-    const outputs = match[3] ? match[3].split(',').map(t => t.trim().split(/\s+/)[0]).filter(t => t.length > 0) : [];
+    // Extract function name
+    const nameMatch = s.match(/^(\w+)/);
+    if (!nameMatch) throw new Error(`Invalid function signature: ${sig}`);
+    const name = nameMatch[1];
+
+    // Find the balanced top-level parentheses for inputs
+    const firstParen = s.indexOf('(');
+    if (firstParen === -1) throw new Error(`Invalid function signature: ${sig}`);
+    const inputEnd = findMatchingParen(s, firstParen);
+    const inputStr = s.slice(firstParen + 1, inputEnd);
+
+    // Find "returns" clause and its balanced parentheses
+    let outputStr = '';
+    const rest = s.slice(inputEnd + 1);
+    const returnsIdx = rest.indexOf('returns');
+    if (returnsIdx !== -1) {
+        const afterReturns = rest.slice(returnsIdx + 7).trimStart();
+        if (afterReturns.startsWith('(')) {
+            const outEnd = findMatchingParen(afterReturns, 0);
+            outputStr = afterReturns.slice(1, outEnd);
+        }
+    }
+
+    const inputs = splitTopLevelParams(inputStr);
+    const outputs = splitTopLevelParams(outputStr);
     return { name, inputs, outputs };
+}
+
+/** Find the index of the matching closing paren for the open paren at pos */
+function findMatchingParen(s: string, pos: number): number {
+    let depth = 0;
+    for (let i = pos; i < s.length; i++) {
+        if (s[i] === '(') depth++;
+        else if (s[i] === ')') { depth--; if (depth === 0) return i; }
+    }
+    return s.length;
+}
+
+/** Extract the ABI type from a parameter string, handling tuples with named params */
+function extractType(param: string): string {
+    param = param.trim();
+    if (!param.startsWith('(')) {
+        return param.split(/\s+/)[0];
+    }
+    // Tuple: find matching close paren
+    let depth = 0;
+    let closeIdx = 0;
+    for (let i = 0; i < param.length; i++) {
+        if (param[i] === '(') depth++;
+        else if (param[i] === ')') {
+            depth--;
+            if (depth === 0) { closeIdx = i; break; }
+        }
+    }
+    // Check for trailing [] (array of tuples)
+    let end = closeIdx + 1;
+    while (end < param.length && param[end] === '[') {
+        const close = param.indexOf(']', end);
+        if (close === -1) break;
+        end = close + 1;
+    }
+    const inner = param.slice(1, closeIdx);
+    const suffix = param.slice(closeIdx + 1, end);
+    // Recursively extract types from inner params (strips names like "uint8 poolType" → "uint8")
+    const innerTypes = splitTopLevelParams(inner);
+    return '(' + innerTypes.join(',') + ')' + suffix;
+}
+
+/** Split a param string by commas, respecting nested parens (for tuple types) */
+function splitTopLevelParams(s: string): string[] {
+    s = s.trim();
+    if (!s) return [];
+    const params: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < s.length; i++) {
+        if (s[i] === '(') depth++;
+        else if (s[i] === ')') depth--;
+        else if (s[i] === ',' && depth === 0) {
+            params.push(extractType(s.slice(start, i)));
+            start = i + 1;
+        }
+    }
+    params.push(extractType(s.slice(start)));
+    return params.filter(t => t.length > 0);
 }
 
 /** Get 4-byte function selector from signature */

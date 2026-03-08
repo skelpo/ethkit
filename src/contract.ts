@@ -62,6 +62,51 @@ export function createContractReader(
     return methods;
 }
 
+/** Parse output parameter names from a string ABI signature like "foo() returns (uint256 balance, int24 tick)" */
+function parseOutputNames(sig: string): string[] {
+    const returnsIdx = sig.indexOf('returns');
+    if (returnsIdx === -1) return [];
+    const afterReturns = sig.slice(returnsIdx + 7).trim();
+    if (!afterReturns.startsWith('(')) return [];
+    // Find matching close paren
+    let depth = 0;
+    let end = 0;
+    for (let i = 0; i < afterReturns.length; i++) {
+        if (afterReturns[i] === '(') depth++;
+        else if (afterReturns[i] === ')') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    const inner = afterReturns.slice(1, end);
+    if (!inner.trim()) return [];
+    // Split by commas respecting nested parens
+    const params: string[] = [];
+    depth = 0;
+    let start = 0;
+    for (let i = 0; i < inner.length; i++) {
+        if (inner[i] === '(') depth++;
+        else if (inner[i] === ')') depth--;
+        else if (inner[i] === ',' && depth === 0) {
+            params.push(inner.slice(start, i).trim());
+            start = i + 1;
+        }
+    }
+    params.push(inner.slice(start).trim());
+    // Each param is like "uint256 balance" or "int24" — extract the name (second word) if present
+    return params.map(p => {
+        const parts = p.split(/\s+/);
+        return parts.length >= 2 ? parts[parts.length - 1] : '';
+    });
+}
+
+/** Add named properties to a result array for ethers.js Result compatibility */
+function addNamedProps(result: any[], names: string[]): any {
+    for (let i = 0; i < names.length && i < result.length; i++) {
+        if (names[i]) {
+            (result as any)[names[i]] = result[i];
+        }
+    }
+    return result;
+}
+
 // --- ABI JSON parsing for Contract() ---
 
 interface AbiEntry {
@@ -74,10 +119,7 @@ interface AbiEntry {
 
 /** Convert tuple components to a Solidity tuple type string */
 function tupleType(components: any[]): string {
-    const inner = components.map(c => {
-        if (c.components) return tupleType(c.components);
-        return c.type;
-    }).join(',');
+    const inner = components.map(c => resolveType(c)).join(',');
     return `(${inner})`;
 }
 
@@ -100,6 +142,34 @@ function abiEntryToSig(entry: AbiEntry): string {
         return `${entry.name}(${inputs}) returns (${outputs})`;
     }
     return `${entry.name}(${inputs})`;
+}
+
+/**
+ * Normalize a value for ABI encoding using component names from JSON ABI.
+ * Converts objects with named properties into positional arrays matching ABI order.
+ */
+function normalizeForAbi(input: { type: string; name?: string; components?: any[] }, value: any): any {
+    if ((input.type === 'tuple' || input.type === 'tuple[]') && input.components) {
+        if (input.type === 'tuple[]') {
+            if (!Array.isArray(value)) return value;
+            return value.map((v: any) => normalizeForAbi({ ...input, type: 'tuple' }, v));
+        }
+        // tuple: convert named object to positional array
+        if (Array.isArray(value)) {
+            return value.map((v: any, i: number) =>
+                input.components![i] ? normalizeForAbi(input.components![i], v) : v
+            );
+        }
+        if (typeof value === 'object' && value !== null) {
+            return input.components.map((c: any) => normalizeForAbi(c, value[c.name]));
+        }
+        return value;
+    }
+    // For arrays of non-tuple types, just pass through
+    if (input.type.endsWith('[]') && Array.isArray(value)) {
+        return value;
+    }
+    return value;
 }
 
 /**
@@ -130,11 +200,13 @@ export function Contract(
     // Store the interface-like functionality
     const sigsByName: Record<string, string> = {};
     const selectorsByName: Record<string, string> = {};
+    const abiEntriesByName: Record<string, AbiEntry> = {};
 
     for (const entry of abi) {
         let sig: string;
         let name: string;
         let isView: boolean;
+        let outputNames: string[] = [];
 
         if (typeof entry === 'string') {
             // String ABI like "function balanceOf(address) view returns (uint256)"
@@ -142,21 +214,28 @@ export function Contract(
             name = parsed.name;
             sig = entry;
             isView = entry.includes('view') || entry.includes('pure');
+            // Extract output names from string sig: "returns (uint256 balance, int24 tick)"
+            outputNames = parseOutputNames(entry);
         } else {
             if (entry.type !== 'function' || !entry.name) continue;
             name = entry.name;
             sig = abiEntryToSig(entry);
             isView = entry.stateMutability === 'view' || entry.stateMutability === 'pure';
+            outputNames = (entry.outputs || []).map(o => o.name || '');
+            abiEntriesByName[name] = entry;
         }
 
         sigsByName[name] = sig;
         selectorsByName[name] = functionSelector(sig);
 
+        // Capture outputNames in closure for ethers-compat named result properties
+        const outNames = outputNames;
+
         if (isView) {
             methods[name] = async (...args: any[]) => {
                 const result = await contractCall(provider, address, sig, args);
                 // ethers compat: unwrap single return value
-                return result.length === 1 ? result[0] : result;
+                return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };
         } else {
             methods[name] = async (...args: any[]) => {
@@ -175,12 +254,12 @@ export function Contract(
                 }
                 // Read-only provider but non-view function — do eth_call (staticCall)
                 const result = await contractCall(provider, address, sig, callArgs);
-                return result.length === 1 ? result[0] : result;
+                return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };
             // Also provide a staticCall version for simulation
             methods[name].staticCall = async (...args: any[]) => {
                 const result = await contractCall(provider, address, sig, args);
-                return result.length === 1 ? result[0] : result;
+                return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };
         }
     }
@@ -193,19 +272,43 @@ export function Contract(
 
     // interface property for encoding/decoding
     methods.interface = {
-        encodeFunctionData: (nameOrSig: string, args: any[] = []) => {
-            const sig = sigsByName[nameOrSig] || nameOrSig;
-            return encodeFunctionData(sig, args);
+        encodeFunctionData: (nameOrSig: string | { name: string; selector?: string }, args: any[] = []) => {
+            const key = typeof nameOrSig === 'string' ? nameOrSig : nameOrSig.name;
+            const sig = sigsByName[key] || key;
+            // Normalize args using JSON ABI component names if available
+            const abiEntry = abiEntriesByName[key];
+            const normalizedArgs = abiEntry?.inputs
+                ? args.map((arg, i) => abiEntry.inputs![i] ? normalizeForAbi(abiEntry.inputs![i], arg) : arg)
+                : args;
+            return encodeFunctionData(sig, normalizedArgs);
         },
-        decodeFunctionResult: (nameOrSig: string, data: string) => {
-            const sig = sigsByName[nameOrSig] || nameOrSig;
+        decodeFunctionResult: (nameOrSig: string | { name: string }, data: string) => {
+            const key = typeof nameOrSig === 'string' ? nameOrSig : nameOrSig.name;
+            const sig = sigsByName[key] || key;
             return decodeFunctionResult(sig, data);
+        },
+        getFunction: (nameOrSig: string) => {
+            // Strip signature to just the name for lookup
+            const justName = nameOrSig.includes('(') ? nameOrSig.slice(0, nameOrSig.indexOf('(')) : nameOrSig;
+            const sig = sigsByName[justName] || sigsByName[nameOrSig];
+            if (!sig) return null;
+            return {
+                name: justName,
+                selector: selectorsByName[justName],
+                format: () => sig,
+            };
         },
         parseLog: (log: { topics: string[]; data: string }) => {
             // Minimal implementation — returns null for now
             return null;
         },
         fragments: Object.keys(sigsByName).map(name => ({ name, type: 'function' })),
+    };
+
+    // ethers compat: contract.getFunction('name') returns the callable method
+    methods.getFunction = (nameOrSig: string) => {
+        const justName = nameOrSig.includes('(') ? nameOrSig.slice(0, nameOrSig.indexOf('(')) : nameOrSig;
+        return methods[justName] || methods[nameOrSig];
     };
 
     // ethers compat: contract.connect(newRunner)

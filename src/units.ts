@@ -21,13 +21,14 @@ export function formatEther(wei: bigint): string {
     return formatUnits(wei, 18);
 }
 
-export function formatUnits(value: bigint, decimals: number | string): string {
+export function formatUnits(value: bigint | number | string, decimals: number | string): string {
     const d = resolveDecimals(decimals);
     const divisor = 10n ** BigInt(d);
-    const negative = value < 0n;
-    if (negative) value = -value;
-    const whole = value / divisor;
-    const remainder = value % divisor;
+    let v = BigInt(value);
+    const negative = v < 0n;
+    if (negative) v = -v;
+    const whole = v / divisor;
+    const remainder = v % divisor;
     const fracStr = remainder.toString().padStart(d, '0').replace(/0+$/, '') || '0';
     const result = whole.toString() + '.' + fracStr;
     return negative ? '-' + result : result;

@@ -18,6 +18,7 @@ export interface Wallet {
     signTransaction(tx: TransactionRequest): Promise<string>;
     sendTransaction(tx: TransactionRequest): Promise<SendTransactionResult>;
     signMessage(message: string | Uint8Array): Promise<string>;
+    populateTransaction(tx: TransactionRequest): Promise<TransactionRequest>;
     connect(provider: Provider): Wallet;
     getAddress(): string;
     getNonce(blockTag?: string): Promise<number>;
@@ -73,6 +74,11 @@ export function createWallet(privateKey: string, provider?: Provider): Wallet {
             if (tx.chainId === undefined) {
                 tx.chainId = p.chainId;
             }
+            // Auto-estimate gasLimit if missing
+            if (tx.gasLimit === undefined) {
+                const estimate = await p.estimateGas({ to: tx.to, from: address, data: tx.data, value: tx.value });
+                tx.gasLimit = estimate * 12n / 10n; // 20% buffer
+            }
             const signedTx = await wallet.signTransaction(tx);
             const hash = await p.sendRawTransaction(signedTx);
             return {
@@ -119,6 +125,25 @@ export function createWallet(privateKey: string, provider?: Provider): Wallet {
 
         getAddress(): string {
             return address;
+        },
+
+        async populateTransaction(tx: TransactionRequest): Promise<TransactionRequest> {
+            const populated = { ...tx };
+            if (populated.from === undefined) populated.from = address;
+            if (populated.chainId === undefined && currentProvider) {
+                populated.chainId = currentProvider.chainId;
+            }
+            if (populated.nonce === undefined && currentProvider) {
+                populated.nonce = await currentProvider.getTransactionCount(address, 'latest');
+            }
+            if (populated.type === undefined) {
+                populated.type = populated.maxFeePerGas !== undefined ? 2 : 0;
+            }
+            if (populated.gasLimit === undefined && currentProvider) {
+                const estimate = await currentProvider.estimateGas({ to: populated.to, from: address, data: populated.data, value: populated.value });
+                populated.gasLimit = estimate * 12n / 10n;
+            }
+            return populated;
         },
 
         async getNonce(blockTag: string = 'latest'): Promise<number> {
