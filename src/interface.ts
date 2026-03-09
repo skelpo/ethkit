@@ -70,11 +70,17 @@ export interface Interface {
     forEachEvent(callback: (evt: any) => void): void;
 }
 
+/** Constructor type supporting both `new Interface(abi)` and `Interface(abi)` */
+interface InterfaceConstructor {
+    (abi: (string | AbiEntry)[]): Interface;
+    new(abi: (string | AbiEntry)[]): Interface;
+}
+
 /**
  * Drop-in replacement for ethers.Interface.
  * Implemented as a constructor function (not a class) for Perry compatibility.
  */
-export function Interface(abi: (string | AbiEntry)[]): Interface {
+export const Interface: InterfaceConstructor = function Interface(abi: (string | AbiEntry)[]): Interface {
     const functions: Record<string, ParsedFunction> = {};
     const functionsBySelector: Record<string, ParsedFunction> = {};
     const events: Record<string, ParsedEvent> = {};
@@ -289,4 +295,4 @@ export function Interface(abi: (string | AbiEntry)[]): Interface {
             }
         },
     };
-}
+} as InterfaceConstructor;
