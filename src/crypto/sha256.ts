@@ -17,32 +17,35 @@ const K: number[] = [
   0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
+// Use & 0xFFFFFFFF for 32-bit truncation (Perry's >>> 0 fails inside functions)
+const M = 0xFFFFFFFF;
+
 function rotr(x: number, n: number): number {
-  return ((x >>> n) | (x << (32 - n))) >>> 0;
+  return (((x >>> n) | ((x << (32 - n)) & M)) & M) >>> 0;
 }
 
 function ch(x: number, y: number, z: number): number {
-  return ((x & y) ^ (~x & z)) >>> 0;
+  return ((x & y) ^ (~x & z)) & M;
 }
 
 function maj(x: number, y: number, z: number): number {
-  return ((x & y) ^ (x & z) ^ (y & z)) >>> 0;
+  return ((x & y) ^ (x & z) ^ (y & z)) & M;
 }
 
 function sigma0(x: number): number {
-  return (rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22)) >>> 0;
+  return (rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22)) & M;
 }
 
 function sigma1(x: number): number {
-  return (rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25)) >>> 0;
+  return (rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25)) & M;
 }
 
 function gamma0(x: number): number {
-  return (rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3)) >>> 0;
+  return (rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3)) & M;
 }
 
 function gamma1(x: number): number {
-  return (rotr(x, 17) ^ rotr(x, 19) ^ (x >>> 10)) >>> 0;
+  return (rotr(x, 17) ^ rotr(x, 19) ^ (x >>> 10)) & M;
 }
 
 function padMessage(data: Uint8Array): Uint8Array {
@@ -69,24 +72,24 @@ function padMessage(data: Uint8Array): Uint8Array {
 export function sha256(data: Uint8Array): Uint8Array {
   const padded = padMessage(data);
 
-  let h0 = 0x6a09e667 >>> 0;
-  let h1 = 0xbb67ae85 >>> 0;
-  let h2 = 0x3c6ef372 >>> 0;
-  let h3 = 0xa54ff53a >>> 0;
-  let h4 = 0x510e527f >>> 0;
-  let h5 = 0x9b05688c >>> 0;
-  let h6 = 0x1f83d9ab >>> 0;
-  let h7 = 0x5be0cd19 >>> 0;
+  let h0 = 0x6a09e667;
+  let h1 = 0xbb67ae85;
+  let h2 = 0x3c6ef372;
+  let h3 = 0xa54ff53a;
+  let h4 = 0x510e527f;
+  let h5 = 0x9b05688c;
+  let h6 = 0x1f83d9ab;
+  let h7 = 0x5be0cd19;
 
   const W: number[] = new Array(64);
 
   for (let offset = 0; offset < padded.length; offset += 64) {
     for (let i = 0; i < 16; i++) {
       const j = offset + i * 4;
-      W[i] = ((padded[j] << 24) | (padded[j + 1] << 16) | (padded[j + 2] << 8) | padded[j + 3]) >>> 0;
+      W[i] = ((padded[j] << 24) | (padded[j + 1] << 16) | (padded[j + 2] << 8) | padded[j + 3]) & M;
     }
     for (let i = 16; i < 64; i++) {
-      W[i] = (gamma1(W[i - 2]) + W[i - 7] + gamma0(W[i - 15]) + W[i - 16]) >>> 0;
+      W[i] = (gamma1(W[i - 2]) + W[i - 7] + gamma0(W[i - 15]) + W[i - 16]) & M;
     }
 
     let a = h0;
@@ -99,26 +102,26 @@ export function sha256(data: Uint8Array): Uint8Array {
     let h = h7;
 
     for (let i = 0; i < 64; i++) {
-      const t1 = (h + sigma1(e) + ch(e, f, g) + K[i] + W[i]) >>> 0;
-      const t2 = (sigma0(a) + maj(a, b, c)) >>> 0;
+      const t1 = (h + sigma1(e) + ch(e, f, g) + K[i] + W[i]) & M;
+      const t2 = (sigma0(a) + maj(a, b, c)) & M;
       h = g;
       g = f;
       f = e;
-      e = (d + t1) >>> 0;
+      e = (d + t1) & M;
       d = c;
       c = b;
       b = a;
-      a = (t1 + t2) >>> 0;
+      a = (t1 + t2) & M;
     }
 
-    h0 = (h0 + a) >>> 0;
-    h1 = (h1 + b) >>> 0;
-    h2 = (h2 + c) >>> 0;
-    h3 = (h3 + d) >>> 0;
-    h4 = (h4 + e) >>> 0;
-    h5 = (h5 + f) >>> 0;
-    h6 = (h6 + g) >>> 0;
-    h7 = (h7 + h) >>> 0;
+    h0 = (h0 + a) & M;
+    h1 = (h1 + b) & M;
+    h2 = (h2 + c) & M;
+    h3 = (h3 + d) & M;
+    h4 = (h4 + e) & M;
+    h5 = (h5 + f) & M;
+    h6 = (h6 + g) & M;
+    h7 = (h7 + h) & M;
   }
 
   const result = new Uint8Array(32);
