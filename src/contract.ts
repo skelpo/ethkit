@@ -201,6 +201,8 @@ export function Contract(
     const sigsByName: Record<string, string> = {};
     const selectorsByName: Record<string, string> = {};
     const abiEntriesByName: Record<string, AbiEntry> = {};
+    // Overload support: name → array of sigs (for functions with multiple overloads)
+    const overloadsByName: Record<string, string[]> = {};
 
     for (const entry of abi) {
         let sig: string;
@@ -227,18 +229,28 @@ export function Contract(
 
         sigsByName[name] = sig;
         selectorsByName[name] = functionSelector(sig);
+        // Also store by canonical key for ethers bracket-access compat
+        // e.g. sigsByName["aggregatedSwap(((uint256,address,address,uint256,uint256)[])[])"]
+        const parsed = parseSignature(sig);
+        const canonicalKey = parsed.name + '(' + parsed.inputs.join(',') + ')';
+        sigsByName[canonicalKey] = sig;
+        // Track all overloads per name
+        if (!overloadsByName[name]) overloadsByName[name] = [];
+        overloadsByName[name].push(sig);
 
         // Capture outputNames in closure for ethers-compat named result properties
         const outNames = outputNames;
 
+        // Create the method function (used for both name and canonical key access)
+        let method: any;
         if (isView) {
-            methods[name] = async (...args: any[]) => {
+            method = async (...args: any[]) => {
                 const result = await contractCall(provider, address, sig, args);
                 // ethers compat: unwrap single return value
                 return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };
         } else {
-            methods[name] = async (...args: any[]) => {
+            method = async (...args: any[]) => {
                 // Last arg might be overrides object
                 let callArgs = args;
                 let overrides: any = {};
@@ -257,11 +269,16 @@ export function Contract(
                 return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };
             // Also provide a staticCall version for simulation
-            methods[name].staticCall = async (...args: any[]) => {
+            method.staticCall = async (...args: any[]) => {
                 const result = await contractCall(provider, address, sig, args);
                 return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };
         }
+
+        methods[name] = method;
+        // Also store method by canonical key for ethers bracket access:
+        // e.g. swapper["aggregatedSwap(((uint256,address,address,uint256,uint256)[])[])"]()
+        methods[canonicalKey] = method;
     }
 
     // ethers compat: contract.target = address
@@ -270,11 +287,29 @@ export function Contract(
     // ethers compat: contract.getAddress()
     methods.getAddress = async () => address;
 
+    // Resolve a name or signature to the correct function signature,
+    // handling overloaded functions by matching argument count
+    function resolveSig(nameOrSig: string, argCount?: number): string {
+        // Direct match (full sig, canonical key, or unique name)
+        const direct = sigsByName[nameOrSig];
+        if (direct) {
+            // If there are overloads for this name and we have arg count, pick the right one
+            const overloads = overloadsByName[nameOrSig];
+            if (overloads && overloads.length > 1 && argCount !== undefined) {
+                const match = overloads.find(s => parseSignature(s).inputs.length === argCount);
+                if (match) return match;
+            }
+            return direct;
+        }
+        // Not found — treat as raw signature string
+        return nameOrSig;
+    }
+
     // interface property for encoding/decoding
     methods.interface = {
         encodeFunctionData: (nameOrSig: string | { name: string; selector?: string }, args: any[] = []) => {
             const key = typeof nameOrSig === 'string' ? nameOrSig : nameOrSig.name;
-            const sig = sigsByName[key] || key;
+            const sig = resolveSig(key, args.length);
             // Normalize args using JSON ABI component names if available
             const abiEntry = abiEntriesByName[key];
             const normalizedArgs = abiEntry?.inputs
@@ -284,7 +319,7 @@ export function Contract(
         },
         decodeFunctionResult: (nameOrSig: string | { name: string }, data: string) => {
             const key = typeof nameOrSig === 'string' ? nameOrSig : nameOrSig.name;
-            const sig = sigsByName[key] || key;
+            const sig = resolveSig(key);
             return decodeFunctionResult(sig, data);
         },
         getFunction: (nameOrSig: string) => {
