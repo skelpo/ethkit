@@ -1,6 +1,6 @@
 {
   "name": "@skelpo/ethkit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Pure TypeScript Ethereum library. Lightweight, function-based drop-in replacement for ethers.js.",
   "main": "dist/index.js",
@@ -38,11 +38,9 @@
   },
   "homepage": "https://github.com/skelpo/ethkit",
   "license": "MIT",
-  "dependencies": {
-    "@noble/hashes": "^1.7.1",
-    "@noble/curves": "^1.8.1"
-  },
   "devDependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
     "ethers": "^6.13.0",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0"

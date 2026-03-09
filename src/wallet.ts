@@ -1,5 +1,4 @@
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { randomBytes } from '@noble/hashes/utils';
+import { sign as secp256k1Sign, getPublicKey as secp256k1GetPublicKey } from './crypto/secp256k1.js';
 import { keccak256, hexToBytes, bytesToHex } from './hash.js';
 import { computeAddress } from './address.js';
 import { serializeEip1559, serializeSignedEip1559, serializeLegacy, serializeSignedLegacy } from './transaction.js';
@@ -27,13 +26,13 @@ export interface Wallet {
 export function createWallet(privateKey: string, provider?: Provider): Wallet {
     if (privateKey.startsWith('0x')) privateKey = privateKey.slice(2);
     const keyBytes = hexToBytes(privateKey);
-    const publicKey = secp256k1.getPublicKey(keyBytes, false); // uncompressed
+    const publicKey = secp256k1GetPublicKey(keyBytes, false); // uncompressed
     const address = computeAddress(publicKey);
     let currentProvider = provider || null;
 
     function sign(hash: string): { r: string; s: string; v: number } {
         const hashBytes = hexToBytes(hash);
-        const sig = secp256k1.sign(hashBytes, keyBytes);
+        const sig = secp256k1Sign(hashBytes, keyBytes);
         return {
             r: '0x' + sig.r.toString(16).padStart(64, '0'),
             s: '0x' + sig.s.toString(16).padStart(64, '0'),
@@ -157,6 +156,7 @@ export function createWallet(privateKey: string, provider?: Provider): Wallet {
 
 /** Generate a new random wallet */
 export function createRandomWallet(provider?: Provider): Wallet {
-    const key = randomBytes(32);
+    const key = new Uint8Array(32);
+    globalThis.crypto.getRandomValues(key);
     return createWallet('0x' + bytesToHex(key), provider);
 }

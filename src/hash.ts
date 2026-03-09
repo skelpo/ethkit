@@ -1,5 +1,5 @@
-import { keccak_256 } from '@noble/hashes/sha3';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { keccak256 as keccak256Raw } from './crypto/keccak.js';
+import { sign as secp256k1Sign, recoverPublicKey as secp256k1Recover } from './crypto/secp256k1.js';
 
 export function keccak256(data: Uint8Array | string): string {
     let bytes: Uint8Array;
@@ -12,7 +12,7 @@ export function keccak256(data: Uint8Array | string): string {
     } else {
         bytes = data;
     }
-    return '0x' + bytesToHex(keccak_256(bytes));
+    return '0x' + bytesToHex(keccak256Raw(bytes));
 }
 
 /** Compute the full keccak256 hash of a UTF-8 string (e.g. event/function signature) */
@@ -117,18 +117,13 @@ export function hashMessage(message: string | Uint8Array): string {
 /** Recover the address that signed a message hash with the given signature */
 export function recoverAddress(digest: string, signature: string): string {
     const sigBytes = hexToBytes(signature);
-    const r = sigBytes.slice(0, 32);
-    const s = sigBytes.slice(32, 64);
+    const r = BigInt('0x' + bytesToHex(sigBytes.slice(0, 32)));
+    const s = BigInt('0x' + bytesToHex(sigBytes.slice(32, 64)));
     const v = sigBytes[64];
     const recoveryBit = v >= 27 ? v - 27 : v;
-    const sig = new secp256k1.Signature(
-        BigInt('0x' + bytesToHex(r)),
-        BigInt('0x' + bytesToHex(s)),
-    ).addRecoveryBit(recoveryBit);
-    const pubKey = sig.recoverPublicKey(hexToBytes(digest));
-    const uncompressed = pubKey.toRawBytes(false);
+    const uncompressed = secp256k1Recover(hexToBytes(digest), { r, s }, recoveryBit);
     // Address = last 20 bytes of keccak256(pubkey without 0x04 prefix)
-    const hash = keccak_256(uncompressed.slice(1));
+    const hash = keccak256Raw(uncompressed.slice(1));
     return '0x' + bytesToHex(hash.slice(-20));
 }
 
