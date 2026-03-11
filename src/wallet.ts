@@ -78,6 +78,16 @@ export function createWallet(privateKey: string, provider?: Provider): Wallet {
                 const estimate = await p.estimateGas({ to: tx.to, from: address, data: tx.data, value: tx.value });
                 tx.gasLimit = estimate * 12n / 10n; // 20% buffer
             }
+            // Auto-fill gas price if missing
+            if (tx.maxFeePerGas === undefined && tx.gasPrice === undefined) {
+                const feeData = await p.getFeeData();
+                if (feeData.maxFeePerGas !== null) {
+                    tx.maxFeePerGas = feeData.maxFeePerGas;
+                    tx.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 1500000000n;
+                } else if (feeData.gasPrice !== null) {
+                    tx.gasPrice = feeData.gasPrice;
+                }
+            }
             const signedTx = await wallet.signTransaction(tx);
             const hash = await p.sendRawTransaction(signedTx);
             return {
