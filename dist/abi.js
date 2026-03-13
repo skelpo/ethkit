@@ -300,6 +300,10 @@ function normalizeType(type) {
 /** Extract the ABI type from a parameter string, handling tuples with named params */
 function extractType(param) {
     param = param.trim();
+    // Strip "tuple" keyword — e.g. "tuple(uint256,address)" → "(uint256,address)"
+    if (param.startsWith('tuple(')) {
+        param = param.slice(5); // remove "tuple", keep the "("
+    }
     if (!param.startsWith('(')) {
         return normalizeType(param.split(/\s+/)[0]);
     }
