@@ -230,11 +230,15 @@ export function createProvider(url: string, chainId: number = 1): Provider {
         },
 
         async sendRawTransaction(signedTx: string): Promise<string> {
-            return rpc('eth_sendRawTransaction', [signedTx]);
+            // Pass params via an intermediate variable to avoid inline array with
+            // cross-module string param (Perry array literal with NaN-boxed string crashes)
+            const params = [signedTx];
+            return rpc('eth_sendRawTransaction', params);
         },
 
         async broadcastTransaction(signedTx: string): Promise<string> {
-            return rpc('eth_sendRawTransaction', [signedTx]);
+            const params = [signedTx];
+            return rpc('eth_sendRawTransaction', params);
         },
 
         async getStorageAt(address: string, slot: string, blockTag: BlockTag = 'latest'): Promise<string> {
