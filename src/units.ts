@@ -5,12 +5,12 @@ const NAMED_UNITS: Record<string, number> = {
 };
 
 function resolveDecimals(decimals: number | string): number {
-    if (typeof decimals === 'string') {
-        const d = NAMED_UNITS[decimals];
-        if (d === undefined) throw new Error(`Unknown unit: ${decimals}`);
-        return d;
-    }
-    return decimals;
+    if (typeof decimals === 'number') return decimals;
+    // String case — look up named unit
+    const name: string = decimals as string;
+    const d = NAMED_UNITS[name];
+    if (d === undefined) throw new Error(`Unknown unit: ${name}`);
+    return d;
 }
 
 export function parseEther(value: string): bigint {
