@@ -30,20 +30,26 @@ export interface Provider {
     removeAllListeners(event?: string): void;
 }
 
-function blockTagToHex(tag: BlockTag): string {
-    if (typeof tag === 'number') {
-        // Build hex string without toString(16) in a function — Perry workaround
-        const HEX_CHARS = '0123456789abcdef';
-        let n = tag;
-        if (n === 0) return '0x0';
-        let hex = '';
-        while (n > 0) {
-            hex = HEX_CHARS[n & 0xf] + hex;
-            n = Math.floor(n / 16);
-        }
-        return '0x' + hex;
+function numberToHex(n: number): string {
+    const HEX_CHARS = '0123456789abcdef';
+    if (n === 0) return '0x0';
+    let hex = '';
+    let val = n;
+    while (val > 0) {
+        hex = HEX_CHARS[val & 0xf] + hex;
+        val = Math.floor(val / 16);
     }
-    return String(tag);
+    return '0x' + hex;
+}
+
+// Perry workaround: split into number-only function to avoid union param SIGSEGV
+function blockTagToHex(tag: number): string {
+    return numberToHex(tag);
+}
+
+function resolveBlockTag(tag: any): string {
+    if (typeof tag === 'number') return numberToHex(tag);
+    return 'latest';
 }
 
 export function createProvider(url: string, chainId: number = 1): Provider {
@@ -73,7 +79,7 @@ export function createProvider(url: string, chainId: number = 1): Provider {
             if (tx.value) params.value = '0x' + tx.value.toString(16);
             if (tx.gasLimit) params.gas = '0x' + tx.gasLimit.toString(16);
             if (tx.gasPrice) params.gasPrice = '0x' + tx.gasPrice.toString(16);
-            const block = tx.blockTag !== undefined ? blockTagToHex(tx.blockTag) : 'latest';
+            const block = tx.blockTag !== undefined ? (typeof tx.blockTag === 'number' ? numberToHex(tx.blockTag) : 'latest') : 'latest';
             return rpc('eth_call', [params, block]);
         },
 
@@ -85,7 +91,7 @@ export function createProvider(url: string, chainId: number = 1): Provider {
         },
 
         async getBlock(blockTag: BlockTag, prefetchTxs?: boolean): Promise<Block | null> {
-            const result = await rpc('eth_getBlockByNumber', [blockTagToHex(blockTag), !!prefetchTxs]);
+            const result = await rpc('eth_getBlockByNumber', [(typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest'), !!prefetchTxs]);
             if (!result) return null;
             const block: Block = {
                 number: Number(result.number),
@@ -134,17 +140,17 @@ export function createProvider(url: string, chainId: number = 1): Provider {
         },
 
         async getBalance(address: string, blockTag: BlockTag = 'latest'): Promise<bigint> {
-            const result = await rpc('eth_getBalance', [address, blockTagToHex(blockTag)]);
+            const result = await rpc('eth_getBalance', [address, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
             return BigInt(result);
         },
 
         async getTransactionCount(address: string, blockTag: BlockTag = 'latest'): Promise<number> {
-            const result = await rpc('eth_getTransactionCount', [address, blockTagToHex(blockTag)]);
+            const result = await rpc('eth_getTransactionCount', [address, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
             return Number(result);
         },
 
         async getCode(address: string, blockTag: BlockTag = 'latest'): Promise<string> {
-            return rpc('eth_getCode', [address, blockTagToHex(blockTag)]);
+            return rpc('eth_getCode', [address, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
         },
 
         async estimateGas(tx: { to?: string; from?: string; data?: string; value?: bigint }): Promise<bigint> {
@@ -159,8 +165,8 @@ export function createProvider(url: string, chainId: number = 1): Provider {
 
         async getLogs(filter: Filter): Promise<Log[]> {
             const params: any = {};
-            if (filter.fromBlock !== undefined) params.fromBlock = blockTagToHex(filter.fromBlock);
-            if (filter.toBlock !== undefined) params.toBlock = blockTagToHex(filter.toBlock);
+            if (filter.fromBlock !== undefined) params.fromBlock = typeof filter.fromBlock === 'number' ? numberToHex(filter.fromBlock) : 'latest';
+            if (filter.toBlock !== undefined) params.toBlock = typeof filter.toBlock === 'number' ? numberToHex(filter.toBlock) : 'latest';
             if (filter.address) params.address = filter.address;
             if (filter.topics) params.topics = filter.topics;
             const result = await rpc('eth_getLogs', [params]);
@@ -232,7 +238,7 @@ export function createProvider(url: string, chainId: number = 1): Provider {
         },
 
         async getStorageAt(address: string, slot: string, blockTag: BlockTag = 'latest'): Promise<string> {
-            return rpc('eth_getStorageAt', [address, slot, blockTagToHex(blockTag)]);
+            return rpc('eth_getStorageAt', [address, slot, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
         },
 
         getNetwork(): { chainId: bigint; name: string } {
