@@ -122,7 +122,7 @@ export const Interface: InterfaceConstructor = function Interface(abi: (string |
             if (match) {
                 const name = match[1];
                 const params = match[2] ? match[2].split(',').map((p: string) => {
-                    const parts = p.trim().split(/\s+/);
+                    const parts = p.trim().split(' ');
                     const indexed = parts.includes('indexed');
                     return { type: parts[0], indexed, name: parts[parts.length - 1] };
                 }) : [];
@@ -137,7 +137,7 @@ export const Interface: InterfaceConstructor = function Interface(abi: (string |
             const match = trimmed.match(/^error\s+(\w+)\(([^)]*)\)/);
             if (match) {
                 const name = match[1];
-                const inputTypes = match[2] ? match[2].split(',').map((t: string) => t.trim().split(/\s+/)[0]) : [];
+                const inputTypes = match[2] ? match[2].split(',').map((t: string) => t.trim().split(' ')[0]) : [];
                 const canonical = name + '(' + inputTypes.join(',') + ')';
                 const selector = keccak256(toUtf8Bytes(canonical)).slice(0, 10);
                 const err: ParsedError = { name, selector, inputTypes };

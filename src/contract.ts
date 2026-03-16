@@ -92,7 +92,7 @@ function parseOutputNames(sig: string): string[] {
     params.push(inner.slice(start).trim());
     // Each param is like "uint256 balance" or "int24" — extract the name (second word) if present
     return params.map(p => {
-        const parts = p.split(/\s+/);
+        const parts = p.split(' ');
         return parts.length >= 2 ? parts[parts.length - 1] : '';
     });
 }
