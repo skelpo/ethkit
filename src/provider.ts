@@ -80,7 +80,8 @@ export function createProvider(url: string, chainId: number = 1): Provider {
             if (tx.gasLimit) params.gas = '0x' + tx.gasLimit.toString(16);
             if (tx.gasPrice) params.gasPrice = '0x' + tx.gasPrice.toString(16);
             const block = tx.blockTag !== undefined ? (typeof tx.blockTag === 'number' ? numberToHex(tx.blockTag) : 'latest') : 'latest';
-            return rpc('eth_call', [params, block]);
+            const __r = await rpc('eth_call', [params, block]);
+            return __r;
         },
 
         send: rpc,
@@ -150,7 +151,8 @@ export function createProvider(url: string, chainId: number = 1): Provider {
         },
 
         async getCode(address: string, blockTag: BlockTag = 'latest'): Promise<string> {
-            return rpc('eth_getCode', [address, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
+            const __r = await rpc('eth_getCode', [address, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
+            return __r;
         },
 
         async estimateGas(tx: { to?: string; from?: string; data?: string; value?: bigint }): Promise<bigint> {
@@ -230,19 +232,19 @@ export function createProvider(url: string, chainId: number = 1): Provider {
         },
 
         async sendRawTransaction(signedTx: string): Promise<string> {
-            // Pass params via an intermediate variable to avoid inline array with
-            // cross-module string param (Perry array literal with NaN-boxed string crashes)
-            const params = [signedTx];
-            return rpc('eth_sendRawTransaction', params);
+            // Use await (not bare return) and pass params inline to rpc
+            const result = await rpc('eth_sendRawTransaction', [signedTx]);
+            return result;
         },
 
         async broadcastTransaction(signedTx: string): Promise<string> {
-            const params = [signedTx];
-            return rpc('eth_sendRawTransaction', params);
+            const result = await rpc('eth_sendRawTransaction', [signedTx]);
+            return result;
         },
 
         async getStorageAt(address: string, slot: string, blockTag: BlockTag = 'latest'): Promise<string> {
-            return rpc('eth_getStorageAt', [address, slot, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
+            const __r = await rpc('eth_getStorageAt', [address, slot, (typeof blockTag === 'number' ? numberToHex(blockTag) : 'latest')]);
+            return __r;
         },
 
         getNetwork(): { chainId: bigint; name: string } {
