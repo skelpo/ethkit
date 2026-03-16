@@ -31,8 +31,19 @@ export interface Provider {
 }
 
 function blockTagToHex(tag: BlockTag): string {
-    if (typeof tag === 'number') return '0x' + tag.toString(16);
-    return tag;
+    if (typeof tag === 'number') {
+        // Build hex string without toString(16) in a function — Perry workaround
+        const HEX_CHARS = '0123456789abcdef';
+        let n = tag;
+        if (n === 0) return '0x0';
+        let hex = '';
+        while (n > 0) {
+            hex = HEX_CHARS[n & 0xf] + hex;
+            n = Math.floor(n / 16);
+        }
+        return '0x' + hex;
+    }
+    return String(tag);
 }
 
 export function createProvider(url: string, chainId: number = 1): Provider {
