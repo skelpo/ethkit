@@ -46,12 +46,19 @@ export function createWallet(privateKey: string, provider?: Provider): Wallet {
         provider: currentProvider,
 
         async signTransaction(tx: TransactionRequest): Promise<string> {
+            console.log('[signTx] entered, maxFeePerGas:', tx.maxFeePerGas);
             const type = tx.type ?? (tx.maxFeePerGas !== undefined ? 2 : 0);
+            console.log('[signTx] type:', type);
 
             if (type === 2) {
+                console.log('[signTx] EIP-1559 path');
                 const { signingHash } = serializeEip1559(tx);
+                console.log('[signTx] signingHash:', signingHash);
                 const sig = sign(signingHash);
-                return serializeSignedEip1559(tx, sig);
+                console.log('[signTx] sig.r:', sig.r?.substring(0, 10));
+                const result = serializeSignedEip1559(tx, sig);
+                console.log('[signTx] result len:', result?.length);
+                return result;
             } else {
                 const { signingHash } = serializeLegacy(tx);
                 const sig = sign(signingHash);
@@ -88,7 +95,22 @@ export function createWallet(privateKey: string, provider?: Provider): Wallet {
                     tx.gasPrice = feeData.gasPrice;
                 }
             }
-            const signedTx = await wallet.signTransaction(tx);
+            // Inline signing instead of wallet.signTransaction(tx) — Perry workaround:
+            // closure-captured `wallet` object loses its type through cross-module dispatch,
+            // so wallet.signTransaction is undefined. Use the directly-captured `sign` function.
+            const txType = tx.type ?? (tx.maxFeePerGas !== undefined ? 2 : 0);
+            let signedTx: string;
+            if (txType === 2) {
+                const { signingHash } = serializeEip1559(tx);
+                const sig = sign(signingHash);
+                signedTx = serializeSignedEip1559(tx, sig);
+            } else {
+                const { signingHash } = serializeLegacy(tx);
+                const sig = sign(signingHash);
+                const chainId = tx.chainId || 1;
+                sig.v = sig.v + chainId * 2 + 35;
+                signedTx = serializeSignedLegacy(tx, sig);
+            }
             const hash = await p.sendRawTransaction(signedTx);
             return {
                 hash,
