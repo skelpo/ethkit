@@ -1,4 +1,4 @@
-import { keccak256 as keccak256Raw } from './crypto/keccak.js';
+import { keccakHash as keccak256Raw } from './crypto/keccak.js';
 import { sign as secp256k1Sign, recoverPublicKey as secp256k1Recover } from './crypto/secp256k1.js';
 
 export function keccak256(data: Uint8Array | string): string {

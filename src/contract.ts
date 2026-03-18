@@ -250,26 +250,50 @@ export function Contract(
                 return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };
         } else {
-            method = async (...args: any[]) => {
-                // Last arg might be overrides object
-                let callArgs = args;
-                let overrides: any = {};
-                if (args.length > 0 && typeof args[args.length - 1] === 'object' && args[args.length - 1] !== null) {
+            // Perry compat: use explicit params instead of ...args (rest params)
+            // to match js_closure_callN dispatch arity. The ABI tells us param count.
+            const paramCount = parsed.inputs.length;
+            // Create method with exact param count + optional overrides
+            // This avoids the rest-param/closure-call mismatch in Perry's runtime
+            if (paramCount === 0) {
+                method = async (overridesOrNone?: any) => {
+                    const overrides = (overridesOrNone && typeof overridesOrNone === 'object') ? overridesOrNone : {};
+                    if (wallet) return await contractSend(wallet, address, sig, [], overrides);
+                    const result = await contractCall(provider, address, sig, []);
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            } else if (paramCount === 1) {
+                method = async (a0: any, overridesOrNone?: any) => {
+                    let callArgs = [a0];
+                    let overrides: any = {};
+                    if (overridesOrNone && typeof overridesOrNone === 'object' && ('value' in overridesOrNone || 'gasLimit' in overridesOrNone || 'maxFeePerGas' in overridesOrNone || 'gasPrice' in overridesOrNone || 'nonce' in overridesOrNone)) {
+                        overrides = overridesOrNone;
+                    } else if (a0 && typeof a0 === 'object' && ('value' in a0 || 'gasLimit' in a0 || 'maxFeePerGas' in a0 || 'gasPrice' in a0 || 'nonce' in a0)) {
+                        overrides = a0; callArgs = [];
+                    }
+                    if (wallet) return await contractSend(wallet, address, sig, callArgs, overrides);
+                    const result = await contractCall(provider, address, sig, callArgs);
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            } else {
+                // 2+ params: use generic approach — last arg may be overrides
+                method = async (a0: any, a1: any, a2?: any, a3?: any, a4?: any) => {
+                    const args = [a0, a1, a2, a3, a4].slice(0, paramCount + 1);
+                    let callArgs = args;
+                    let overrides: any = {};
                     const lastArg = args[args.length - 1];
-                    if ('value' in lastArg || 'gasLimit' in lastArg || 'maxFeePerGas' in lastArg || 'gasPrice' in lastArg || 'nonce' in lastArg) {
+                    if (lastArg && typeof lastArg === 'object' && ('value' in lastArg || 'gasLimit' in lastArg || 'maxFeePerGas' in lastArg || 'gasPrice' in lastArg || 'nonce' in lastArg)) {
                         overrides = lastArg;
                         callArgs = args.slice(0, -1);
                     }
-                }
-                if (wallet) {
-                    return await contractSend(wallet, address, sig, callArgs, overrides);
-                }
-                // Read-only provider but non-view function — do eth_call (staticCall)
-                const result = await contractCall(provider, address, sig, callArgs);
-                return result.length === 1 ? result[0] : addNamedProps(result, outNames);
-            };
+                    if (wallet) return await contractSend(wallet, address, sig, callArgs, overrides);
+                    const result = await contractCall(provider, address, sig, callArgs);
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            }
             // Also provide a staticCall version for simulation
-            method.staticCall = async (...args: any[]) => {
+            method.staticCall = async (a0?: any, a1?: any, a2?: any, a3?: any, a4?: any) => {
+                const args = [a0, a1, a2, a3, a4].filter(x => x !== undefined);
                 const result = await contractCall(provider, address, sig, args);
                 return result.length === 1 ? result[0] : addNamedProps(result, outNames);
             };

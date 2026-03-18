@@ -44,8 +44,8 @@ export function serializeSignedEip1559(
         tx.data ? hexToBytes(tx.data) : new Uint8Array(0),
         encodeAccessList(tx.accessList || []),
         bigintToBytes(BigInt(signature.v)),
-        hexToBytes(signature.r),
-        hexToBytes(signature.s),
+        bigintToBytes(BigInt(signature.r)),
+        bigintToBytes(BigInt(signature.s)),
     ];
 
     const encoded = rlpEncode(fields);
@@ -90,8 +90,8 @@ export function serializeSignedLegacy(
         bigintToBytes(tx.value || 0n),
         tx.data ? hexToBytes(tx.data) : new Uint8Array(0),
         bigintToBytes(BigInt(signature.v)),
-        hexToBytes(signature.r),
-        hexToBytes(signature.s),
+        bigintToBytes(BigInt(signature.r)),
+        bigintToBytes(BigInt(signature.s)),
     ];
 
     return '0x' + bytesToHex(rlpEncode(fields));

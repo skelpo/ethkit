@@ -105,7 +105,7 @@ function keccakF(stateHi: number[], stateLo: number[]): void {
 
 const RATE = 136;
 
-export function keccak256(data: Uint8Array): Uint8Array {
+export function keccakHash(data: Uint8Array): Uint8Array {
     const stateHi = new Array<number>(25);
     const stateLo = new Array<number>(25);
     for (let i = 0; i < 25; i++) {
