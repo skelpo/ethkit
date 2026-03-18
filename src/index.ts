@@ -15,7 +15,7 @@ export type { EventFragment } from './abi.js';
 export { ZeroAddress, ZeroHash, MaxUint256, toQuantity, isHexString, hexlify, toBigInt, zeroPadValue, dataSlice, dataLength, concat, stripZerosLeft } from './utils.js';
 
 // RLP
-export { rlpEncode } from './rlp.js';
+export { rlpEncode, bigintToBytes, numberToMinBytes } from './rlp.js';
 
 // Transaction serialization
 export { serializeEip1559, serializeSignedEip1559, serializeLegacy, serializeSignedLegacy, transactionHash } from './transaction.js';
