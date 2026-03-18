@@ -31,7 +31,7 @@ export async function contractSend(
     overrides: { value?: bigint; gasLimit?: bigint; maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint; gasPrice?: bigint; nonce?: number } = {},
 ): Promise<{ hash: string }> {
     const data = encodeFunctionData(sig, args);
-    return wallet.sendTransaction({
+    return await wallet.sendTransaction({
         to: address,
         data,
         ...overrides,
@@ -262,7 +262,7 @@ export function Contract(
                     }
                 }
                 if (wallet) {
-                    return contractSend(wallet, address, sig, callArgs, overrides);
+                    return await contractSend(wallet, address, sig, callArgs, overrides);
                 }
                 // Read-only provider but non-view function — do eth_call (staticCall)
                 const result = await contractCall(provider, address, sig, callArgs);
