@@ -305,7 +305,8 @@ function extractType(param) {
         param = param.slice(5); // remove "tuple", keep the "("
     }
     if (!param.startsWith('(')) {
-        return normalizeType(param.split(/\s+/)[0]);
+        // Use string split instead of regex — Perry doesn't support split(regex) yet
+        return normalizeType(param.split(' ')[0]);
     }
     // Tuple: find matching close paren
     let depth = 0;
@@ -394,7 +395,7 @@ export function parseEvent(sig) {
         throw new Error(`Invalid event signature: ${sig}`);
     const name = match[1];
     const params = match[2] ? match[2].split(',').map(p => {
-        const parts = p.trim().split(/\s+/);
+        const parts = p.trim().split(' ');
         const indexed = parts.includes('indexed');
         const type = parts[0];
         const paramName = parts[parts.length - 1] === 'indexed' ? parts[parts.length - 1] : parts[parts.length - 1];
