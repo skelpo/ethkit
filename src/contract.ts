@@ -244,11 +244,44 @@ export function Contract(
         // Create the method function (used for both name and canonical key access)
         let method: any;
         if (isView) {
-            method = async (...args: any[]) => {
-                const result = await contractCall(provider, address, sig, args);
-                // ethers compat: unwrap single return value
-                return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+            // Perry compat: use explicit params instead of ...args (rest params)
+            // to match js_closure_callN dispatch arity.
+            const viewParamCount = parsed.inputs.length;
+            // Capture abiEntry for normalizeForAbi in view calls (tuple inputs need object→array conversion)
+            const viewAbiEntry = abiEntriesByName[name];
+            const normalizeViewArgs = (args: any[]) => {
+                if (viewAbiEntry?.inputs) {
+                    return args.map((arg, i) => viewAbiEntry.inputs![i] ? normalizeForAbi(viewAbiEntry.inputs![i], arg) : arg);
+                }
+                return args;
             };
+            if (viewParamCount === 0) {
+                method = async () => {
+                    const result = await contractCall(provider, address, sig, []);
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            } else if (viewParamCount === 1) {
+                method = async (a0: any) => {
+                    const result = await contractCall(provider, address, sig, normalizeViewArgs([a0]));
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            } else if (viewParamCount === 2) {
+                method = async (a0: any, a1: any) => {
+                    const result = await contractCall(provider, address, sig, normalizeViewArgs([a0, a1]));
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            } else if (viewParamCount === 3) {
+                method = async (a0: any, a1: any, a2: any) => {
+                    const result = await contractCall(provider, address, sig, normalizeViewArgs([a0, a1, a2]));
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            } else {
+                method = async (a0: any, a1: any, a2: any, a3: any, a4: any) => {
+                    const args = [a0, a1, a2, a3, a4].slice(0, viewParamCount);
+                    const result = await contractCall(provider, address, sig, normalizeViewArgs(args));
+                    return result.length === 1 ? result[0] : addNamedProps(result, outNames);
+                };
+            }
         } else {
             // Perry compat: use explicit params instead of ...args (rest params)
             // to match js_closure_callN dispatch arity. The ABI tells us param count.
