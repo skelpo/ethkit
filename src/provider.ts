@@ -52,15 +52,45 @@ function resolveBlockTag(tag: any): string {
     return 'latest';
 }
 
+// Per-URL keep-alive agent cache. Reuses TCP connections instead of opening
+// a new socket per fetch() call → prevents TIME_WAIT socket accumulation.
+// Without this, 32 worker threads × concurrent RPC calls pile up 400+ TIME_WAIT
+// sockets to the base/bnb node, intermittently hitting fd limits and causing
+// "TypeError: fetch failed" in the trade execution path.
+const agentCache = new Map<string, any>();
+function getOrCreateAgent(url: string): any {
+    let agent = agentCache.get(url);
+    if (!agent) {
+        try {
+            // Node 18+ bundles undici; use its Agent for TCP keep-alive
+            const { Agent } = require('undici');
+            agent = new Agent({
+                keepAliveTimeout: 30_000,    // keep idle sockets alive 30s
+                keepAliveMaxTimeout: 60_000, // max 60s per socket lifetime
+                connections: 20,             // max 20 concurrent sockets per origin
+                pipelining: 1,               // no HTTP pipelining (JSON-RPC doesn't benefit)
+            });
+        } catch {
+            agent = null; // undici not available, fall back to default fetch behavior
+        }
+        agentCache.set(url, agent);
+    }
+    return agent;
+}
+
 export function createProvider(url: string, chainId: number = 1): Provider {
+    const dispatcher = getOrCreateAgent(url);
+
     async function rpc(method: string, params: any[]): Promise<any> {
         const id = globalRpcId++;
         const body = JSON.stringify({ jsonrpc: '2.0', method, params, id });
-        const resp = await fetch(url, {
+        const fetchOpts: any = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body,
-        });
+        };
+        if (dispatcher) fetchOpts.dispatcher = dispatcher;
+        const resp = await fetch(url, fetchOpts);
         const text = await resp.text();
         const json = JSON.parse(text);
         if (json.error) {
